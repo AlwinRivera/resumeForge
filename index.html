@@ -983,16 +983,21 @@
   <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
   <script>
 
-    // ── STATE ──
+    // ─────────────────────────────
+    // STATE
+    // ─────────────────────────────
     let currentResume = null;
     let extractedPhotoDataURL = null;
     let uploadedFile = null;
 
-    // ── CONFIG ──
-    // 👉 PUT YOUR VERCEL URL HERE
+    // ─────────────────────────────
+    // CONFIG
+    // ─────────────────────────────
     const API_URL = "https://resume-forge-sandy.vercel.app/api/forge";
 
-    // ── TABS ──
+    // ─────────────────────────────
+    // TABS
+    // ─────────────────────────────
     function switchTab(tab) {
       $('#tab-paste, #tab-upload').removeClass('active');
       $('#tab-' + tab).addClass('active');
@@ -1000,23 +1005,25 @@
       $('#pane-' + tab).show();
     }
 
-    // ── FILE UPLOAD ──
+    // ─────────────────────────────
+    // FILE UPLOAD
+    // ─────────────────────────────
     document.addEventListener('DOMContentLoaded', function () {
       const dz = document.getElementById('dropZone');
-      if (dz) {
-        dz.addEventListener('dragover', e => {
-          e.preventDefault();
-          dz.classList.add('dragover');
-        });
+      if (!dz) return;
 
-        dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+      dz.addEventListener('dragover', e => {
+        e.preventDefault();
+        dz.classList.add('dragover');
+      });
 
-        dz.addEventListener('drop', e => {
-          e.preventDefault();
-          dz.classList.remove('dragover');
-          handleFile({ target: { files: e.dataTransfer.files } });
-        });
-      }
+      dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+
+      dz.addEventListener('drop', e => {
+        e.preventDefault();
+        dz.classList.remove('dragover');
+        handleFile({ target: { files: e.dataTransfer.files } });
+      });
     });
 
     async function handleFile(event) {
@@ -1026,8 +1033,8 @@
       const isPDF = file.type === 'application/pdf' || file.name.endsWith('.pdf');
 
       if (isPDF) {
-        uploadedFile = null;
-        document.getElementById('pdfNotice').style.display = 'none';
+        extractedPhotoDataURL = null;
+
         document.getElementById('fileStatus').textContent = '⏳ Reading PDF...';
         document.getElementById('resumeText').value = '';
 
@@ -1046,48 +1053,6 @@
             fullText += content.items.map(item => item.str).join(' ') + '\n';
           }
 
-          // ── PHOTO EXTRACTION ──
-          extractedPhotoDataURL = null;
-
-          outer: for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const ops = await page.getOperatorList();
-
-            for (let j = 0; j < ops.fnArray.length; j++) {
-              if (ops.fnArray[j] === pdfjsLib.OPS.paintImageXObject) {
-                const imgName = ops.argsArray[j][0];
-
-                try {
-                  const imgObj = page.objs.get(imgName);
-
-                  if (imgObj && imgObj.data && imgObj.width > 40 && imgObj.height > 40) {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = imgObj.width;
-                    canvas.height = imgObj.height;
-
-                    const ctx = canvas.getContext('2d');
-                    const imgData = ctx.createImageData(imgObj.width, imgObj.height);
-
-                    if (imgObj.data.length === imgObj.width * imgObj.height * 4) {
-                      imgData.data.set(imgObj.data);
-                    } else if (imgObj.data.length === imgObj.width * imgObj.height * 3) {
-                      for (let p = 0, q = 0; p < imgObj.data.length; p += 3, q += 4) {
-                        imgData.data[q] = imgObj.data[p];
-                        imgData.data[q + 1] = imgObj.data[p + 1];
-                        imgData.data[q + 2] = imgObj.data[p + 2];
-                        imgData.data[q + 3] = 255;
-                      }
-                    }
-
-                    ctx.putImageData(imgData, 0, 0);
-                    extractedPhotoDataURL = canvas.toDataURL('image/jpeg', 0.85);
-                    break outer;
-                  }
-                } catch (e) { }
-              }
-            }
-          }
-
           fullText = fullText.trim();
 
           if (!fullText || fullText.length < 30) {
@@ -1096,28 +1061,22 @@
           } else {
             document.getElementById('resumeText').value = fullText;
             document.getElementById('fileStatus').textContent =
-              '✓ ' + file.name + ' extracted.' +
-              (extractedPhotoDataURL ? ' Photo found ✓' : '');
-            document.getElementById('pdfNotice').style.display = 'block';
+              '✓ PDF extracted successfully.';
           }
 
         } catch (e) {
           document.getElementById('fileStatus').textContent =
-            '⚠️ Could not read PDF. Please paste text manually.';
+            '⚠️ Failed to read PDF.';
         }
 
         switchTab('paste');
-
       } else {
-        uploadedFile = null;
-        extractedPhotoDataURL = null;
-
         const reader = new FileReader();
-        reader.onload = function (e) {
+
+        reader.onload = e => {
           document.getElementById('resumeText').value = e.target.result;
           document.getElementById('fileStatus').textContent =
-            '✓ ' + file.name + ' loaded.';
-          document.getElementById('pdfNotice').style.display = 'none';
+            '✓ File loaded.';
           switchTab('paste');
         };
 
@@ -1125,67 +1084,67 @@
       }
     }
 
-    // ── API CALL (UPDATED) ──
+    // ─────────────────────────────
+    // API CALL
+    // ─────────────────────────────
     async function callGroq(systemPrompt, userMessage) {
       const response = await fetch(API_URL, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          systemPrompt,
-          userMessage
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ systemPrompt, userMessage })
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(errText);
+        throw new Error(data.error || 'API error');
       }
 
-      const data = await response.json();
       return data.content;
     }
 
-    // ── FORGE ──
+    // ─────────────────────────────
+    // FORGE RESUME
+    // ─────────────────────────────
     async function forgeResume() {
       const resumeText = document.getElementById('resumeText').value.trim();
       const targetRole = document.getElementById('targetRole').value.trim();
       const btn = document.getElementById('forgeBtn');
-      const errorEl = document.getElementById('errorMsg');
 
-      errorEl.classList.remove('visible');
-
-      if (!resumeText || resumeText.length < 50)
-        return showError('Please paste your resume or upload a file first.');
+      if (!resumeText || resumeText.length < 50) {
+        return showError('Please input a valid resume.');
+      }
 
       btn.disabled = true;
-      btn.innerHTML = '<span class="loading-dots">Forging your resume</span>';
+      btn.innerHTML = 'Forging...';
 
       const roleNote = targetRole
-        ? `Target role: ${targetRole}. Tailor language and keywords for this role.`
-        : 'Tailor for general professional roles.';
+        ? `Target role: ${targetRole}`
+        : 'General professional role';
 
       const systemPrompt = `
-You are an expert resume writer helping Philippine job seekers.
+You are an expert resume writer.
 ${roleNote}
 
-Return ONLY a valid JSON object — no markdown, no backticks, no explanation.
-
-Use exactly this structure:
-{"name":"","email":"","phone":"","location":"","linkedin":"","summary":"","experience":[{"title":"","company":"","dates":"","bullets":[]}],"education":[{"degree":"","school":"","dates":"","detail":""}],"skills":[]}
-
-Rules:
-- strong action verbs
-- quantify achievements
-- do NOT invent anything
-- return valid JSON only
+Return ONLY valid JSON in this format:
+{
+"name":"",
+"email":"",
+"phone":"",
+"location":"",
+"linkedin":"",
+"summary":"",
+"experience":[{"title":"","company":"","dates":"","bullets":[]}],
+"education":[{"degree":"","school":"","dates":"","detail":""}],
+"skills":[]
+}
+No markdown. No explanation.
 `;
 
       try {
         const raw = await callGroq(
           systemPrompt,
-          `Transform this resume:\n---\n${resumeText}\n---\nReturn JSON only.`
+          `Resume:\n${resumeText}`
         );
 
         const clean = raw.replace(/```json|```/g, '').trim();
@@ -1194,90 +1153,113 @@ Rules:
         renderResume(currentResume);
 
         document.getElementById('resultArea').style.display = 'block';
-        document.getElementById('resultArea').scrollIntoView({
-          behavior: 'smooth',
-          block: 'start'
-        });
 
       } catch (e) {
-        showError(
-          e.message.includes('JSON')
-            ? 'AI returned unexpected format. Please try again.'
-            : e.message
-        );
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = '⚡ Forge My Resume';
+        showError('Failed to generate resume.');
+        console.error(e);
       }
+
+      btn.disabled = false;
+      btn.innerHTML = '⚡ Forge My Resume';
     }
 
-    // ── REPROMPT ──
+    // ─────────────────────────────
+    // REPROMPT
+    // ─────────────────────────────
     async function reprompt() {
       const instruction = document.getElementById('repromptInput').value.trim();
-      if (!instruction) return;
-      if (!currentResume) return showError('Generate a resume first.');
-
-      const btn = document.getElementById('repromptBtn');
-      btn.disabled = true;
-      btn.textContent = '…';
-
-      const systemPrompt = `
-You are an expert resume writer.
-The user has a forged resume in JSON format.
-Apply their instruction and return the COMPLETE updated JSON object.
-No markdown, no backticks.
-`;
+      if (!instruction || !currentResume) return;
 
       try {
         const raw = await callGroq(
-          systemPrompt,
-          `Current resume JSON:\n${JSON.stringify(currentResume)}\n\nUser instruction: "${instruction}"`
+          `Update resume JSON based on instruction. Return ONLY JSON.`,
+          `Current: ${JSON.stringify(currentResume)}\nInstruction: ${instruction}`
         );
 
         const clean = raw.replace(/```json|```/g, '').trim();
         currentResume = JSON.parse(clean);
 
         renderResume(currentResume);
-        document.getElementById('repromptInput').value = '';
 
       } catch (e) {
-        showError(
-          e.message.includes('JSON')
-            ? 'AI returned unexpected format. Try rephrasing.'
-            : e.message
-        );
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Update ✦';
+        showError('Update failed.');
       }
     }
 
-    // Enter key support
-    document.addEventListener('DOMContentLoaded', function () {
-      const ri = document.getElementById('repromptInput');
-      if (ri) ri.addEventListener('keydown', e => {
-        if (e.key === 'Enter') reprompt();
-      });
-    });
+    // ─────────────────────────────
+    // RENDER RESUME (FIXED - YOUR MISSING FUNCTION)
+    // ─────────────────────────────
+    function renderResume(r) {
+      const photoHTML = `
+    <div class="photo-upload-circle" onclick="triggerPhotoUpload()">
+      ${extractedPhotoDataURL
+          ? `<img src="${extractedPhotoDataURL}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
+          : `<div style="font-size:10px;">Add Photo</div>`
+        }
+    </div>
+  `;
 
-    // ── PHOTO ──
+      const expHTML = (r.experience || []).map(e => `
+    <div>
+      <b>${e.title || ''}</b><br>
+      ${e.company || ''} | ${e.dates || ''}<br>
+      ${(e.bullets || []).map(b => `<li>${b}</li>`).join('')}
+    </div>
+  `).join('');
+
+      const eduHTML = (r.education || []).map(e => `
+    <div>
+      <b>${e.degree || ''}</b><br>
+      ${e.school || ''} | ${e.dates || ''}
+    </div>
+  `).join('');
+
+      const skillsHTML = (r.skills || []).map(s =>
+        `<span style="margin:3px;padding:5px;background:#eee;display:inline-block;">${s}</span>`
+      ).join('');
+
+      document.getElementById('resumePreview').innerHTML = `
+    <div style="padding:20px;font-family:Arial;">
+      
+      <div style="display:flex;justify-content:space-between;">
+        <h2>${r.name || 'Name'}</h2>
+        ${photoHTML}
+      </div>
+
+      <p>${r.email || ''} | ${r.phone || ''} | ${r.location || ''}</p>
+
+      <h3>Summary</h3>
+      <p>${r.summary || ''}</p>
+
+      <h3>Experience</h3>
+      ${expHTML}
+
+      <h3>Education</h3>
+      ${eduHTML}
+
+      <h3>Skills</h3>
+      ${skillsHTML}
+
+    </div>
+  `;
+    }
+
+    // ─────────────────────────────
+    // PHOTO UPLOAD
+    // ─────────────────────────────
     function triggerPhotoUpload() {
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'image/*';
 
-      input.onchange = function (e) {
+      input.onchange = e => {
         const file = e.target.files[0];
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = function (ev) {
+        reader.onload = ev => {
           extractedPhotoDataURL = ev.target.result;
-
-          const circle = document.querySelector('.photo-upload-circle');
-          if (circle) {
-            circle.innerHTML = `<img src="${extractedPhotoDataURL}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
-          }
+          renderResume(currentResume);
         };
 
         reader.readAsDataURL(file);
@@ -1286,7 +1268,9 @@ No markdown, no backticks.
       input.click();
     }
 
-    // ── UTILS ──
+    // ─────────────────────────────
+    // ERROR HANDLER
+    // ─────────────────────────────
     function showError(msg) {
       const el = document.getElementById('errorMsg');
       el.textContent = msg;
