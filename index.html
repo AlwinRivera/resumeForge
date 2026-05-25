@@ -440,33 +440,21 @@ async function handleFile(event) {
 
 // ── GROQ CALL ──
 async function callGroq(systemPrompt, userMessage) {
-  const apiKey = document.getElementById('apiKey').value.trim();
-  const groqURL = 'https://api.groq.com/openai/v1/chat/completions';
-  let response, data;
-  const btn = document.getElementById('forgeBtn');
+  const response = await fetch(groqURL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ systemPrompt, userMessage })
+  });
 
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    response = await fetch(groqURL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        max_tokens: 2000,
-        temperature: 0.7,
-        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }]
-      })
-    });
-    data = await response.json();
-    if (response.status === 429 && attempt < 3) {
-      const wait = attempt * 7000;
-      btn.innerHTML = `<span>Rate limited — retrying in ${wait/1000}s…</span>`;
-      await new Promise(r => setTimeout(r, wait));
-      btn.innerHTML = '<span class="loading-dots">Retrying</span>';
-    } else break;
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'API error');
   }
-  if (response.status === 429) throw new Error('Still rate limited. Wait 60 seconds and try again.');
-  if (!response.ok) throw new Error(data.error?.message || 'API error ' + response.status);
-  return data.choices?.[0]?.message?.content || '';
+
+  return data.content;
 }
 
 // ── FORGE ──
